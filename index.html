@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src https: data: blob:; connect-src https:; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1117">
+<title>DOM Spider</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --line: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #7cc7ff;
+    --warn: #ff8f8f;
+    --dock-h: 220px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: calc(var(--dock-h) + 16px);
+    overflow-wrap: anywhere;
+  }
+  a { color: var(--accent); }
+  button, input { font: inherit; }
+
+  .wc-head {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: max(12px, env(safe-area-inset-top)) 16px 4px;
+  }
+  .wc-brand { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  .wc-form { display: flex; gap: 8px; }
+  .wc-form input {
+    flex: 1; min-width: 0; min-height: 44px; padding: 8px 12px;
+    color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  .wc-form input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .wc-hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+
+  #wc-stage { max-width: 760px; margin: 0 auto; padding: 8px 16px 24px; }
+
+  /* Built-in sample page */
+  #wc-sample nav ul { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 10px 0; margin: 0; list-style: none; border-bottom: 1px solid var(--line); }
+  #wc-sample nav a { text-decoration: none; font-size: 15px; }
+  #wc-sample h1 { font-size: 30px; line-height: 1.2; margin: 24px 0 4px; }
+  #wc-sample h2 { font-size: 22px; margin: 32px 0 8px; }
+  #wc-sample h3 { font-size: 18px; margin: 24px 0 6px; color: #c9d1d9; }
+  .wc-byline { color: var(--muted); font-size: 14px; margin-top: 0; }
+  .wc-img {
+    display: flex; align-items: flex-end;
+    height: 170px; margin: 20px 0; padding: 12px;
+    border-radius: 14px; border: 1px solid var(--line);
+    background:
+      radial-gradient(circle at 70% 30%, rgba(255,255,255,.25) 0 2px, transparent 3px),
+      radial-gradient(circle at 30% 60%, rgba(255,255,255,.2) 0 2px, transparent 3px),
+      linear-gradient(135deg, #1f3b57, #3d2a5c 60%, #5c3a2a);
+    font-size: 14px; color: #dbe7f3;
+  }
+  .wc-img.wc-img-alt { background: repeating-radial-gradient(circle at 50% 50%, #233 0 6px, #2b4048 6px 7px), #233; }
+  .wc-img span { background: rgba(13,17,23,.7); padding: 2px 8px; border-radius: 6px; }
+  .wc-cta {
+    min-height: 48px; padding: 10px 18px; margin: 8px 0;
+    color: var(--bg); background: var(--accent);
+    border: 0; border-radius: 999px; font-weight: 600;
+  }
+  #wc-sample footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+
+  /* Sanitized remote clone */
+  #wc-remote * { max-width: 100%; }
+  #wc-remote img { height: auto; border-radius: 8px; }
+  #wc-remote pre { white-space: pre-wrap; }
+  #wc-remote table { display: block; overflow-x: auto; }
+  #wc-remote input, #wc-remote textarea, #wc-remote select { max-width: 100%; }
+  #wc-remote .wc-img { height: 120px; }
+
+  .wc-touched { outline: 1px dashed rgba(124,199,255,.35); outline-offset: 3px; }
+
+  #wc-canvas {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10;
+  }
+
+  .wc-dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    background: rgba(13,17,23,.94);
+    border-top: 1px solid var(--line);
+    padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  }
+  .wc-dock-inner { max-width: 760px; margin: 0 auto; }
+  #wc-status { margin: 0 0 6px; font-size: 13px; line-height: 1.4; color: var(--muted); }
+  #wc-status.wc-err { color: var(--warn); }
+  #wc-log summary { cursor: pointer; font-size: 13px; color: var(--muted); padding: 2px 0; }
+  #wc-list { list-style: none; margin: 4px 0 8px; padding: 0; font-size: 12.5px; line-height: 1.35; }
+  #wc-list li { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; white-space: nowrap; overflow: hidden; }
+  #wc-list li:first-child { color: var(--accent); }
+  .wc-tag { flex: none; min-width: 52px; font-family: ui-monospace, Menlo, Consolas, monospace; color: #d2a8ff; }
+  .wc-txt { overflow: hidden; text-overflow: ellipsis; }
+  .wc-href { color: var(--muted); }
+  .wc-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .wc-btn {
+    min-height: 52px; padding: 8px 4px;
+    color: var(--text); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 12px;
+    font-weight: 600; touch-action: manipulation;
+  }
+  .wc-btn:active { background: #21262d; }
+  .wc-btn.wc-primary { background: #1f6feb; border-color: #1f6feb; }
+  .wc-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wc-btn:disabled { opacity: .5; }
+</style>
+</head>
+<body>
+
+<header class="wc-head">
+  <p class="wc-brand">DOM Spider · visual crawler</p>
+  <form class="wc-form" id="wc-form" novalidate>
+    <input id="wc-url" type="url" inputmode="url" enterkeyhint="go" autocomplete="off" spellcheck="false"
+           placeholder="Optional: https://example.com" aria-label="URL to crawl">
+    <button class="wc-btn" id="wc-load" type="submit" style="min-height:44px;padding:0 16px">Load</button>
+  </form>
+  <p class="wc-hint">Remote pages go through a public CORS proxy (best effort) and are sanitized. Leave empty and Load to return to the sample.</p>
+</header>
+
+<main id="wc-stage">
+  <article id="wc-sample">
+    <nav aria-label="Sample site">
+      <ul>
+        <li><a href="#field-notes">Field notes</a></li>
+        <li><a href="#silk">Silk</a></li>
+        <li><a href="#orb-webs">Orb webs</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </nav>
+
+    <h1 id="sample-title">Notes from the Orchard Web</h1>
+    <p class="wc-byline">By the Night Shift Naturalist · 6 min read</p>
+    <p>Every morning the pear trees hold a new map. Between two branches, an orb weaver has rebuilt the
+      <a href="https://en.wikipedia.org/wiki/Spider_web">spider web</a> she ate the night before, thread by thread, in under an hour.</p>
+
+    <div class="wc-img" role="img" aria-label="Dew on an orb web at sunrise"><span>Dew on an orb web at sunrise</span></div>
+
+    <h2 id="field-notes">Field notes</h2>
+    <p>A web is a record of a walk. Each radial line is a trip from the hub to the frame and back, and every crossing is a decision about where to go next.</p>
+    <ul>
+      <li>Three anchor threads carry most of the load.</li>
+      <li>Radials are laid first, spiral last.</li>
+      <li>The sticky spiral is spun from the outside in.</li>
+    </ul>
+
+    <h3>Why the hub matters</h3>
+    <p>The hub is where the spider waits. Vibrations travel along the radials, so from the center she can tell which sector was touched and how hard.</p>
+    <p hidden>This paragraph is hidden. The crawler must skip it.</p>
+    <p></p>
+
+    <h2 id="silk">Silk</h2>
+    <p>Dragline silk is stronger than steel by weight. The spider trails a safety line behind her wherever she goes, which is why her path is always visible.</p>
+
+    <div class="wc-img wc-img-alt" role="img" aria-label="Macro view of silk strands"><span>Macro view of silk strands</span></div>
+
+    <button type="button" class="wc-cta">Subscribe to field notes</button>
+
+    <h2 id="orb-webs">Orb webs</h2>
+    <p>Orb webs are built in a fixed order. Watch one long enough and you can predict the next move.</p>
+    <ol>
+      <li>Bridge line across the gap.</li>
+      <li>Frame and radials from the hub.</li>
+      <li>Temporary spiral, then the capture spiral.</li>
+    </ol>
+    <h3>Reading a broken web</h3>
+    <p>A torn sector tells you where prey hit. A clean hole in the middle tells you the spider left on purpose. <a href="#field-notes">Compare with the field notes.</a></p>
+
+    <footer id="contact">
+      <p>© 2026 Orchard Web Notes. Sample content for DOM Spider.</p>
+      <p><a href="mailto:hello@example.com">hello@example.com</a> · <a href="#sample-title">Back to top</a></p>
+    </footer>
+  </article>
+
+  <div id="wc-remote" hidden></div>
+</main>
+
+<canvas id="wc-canvas" aria-hidden="true"></canvas>
+
+<div class="wc-dock" id="wc-dock">
+  <div class="wc-dock-inner">
+    <p id="wc-status" role="status" aria-live="polite">Starting…</p>
+    <details id="wc-log" open>
+      <summary>Last 8 touched · <span id="wc-count">0 / 0</span></summary>
+      <ol id="wc-list"></ol>
+    </details>
+    <div class="wc-bar" role="toolbar" aria-label="Crawler controls">
+      <button class="wc-btn wc-primary" id="wc-play" type="button" aria-pressed="true">Pause</button>
+      <button class="wc-btn" id="wc-step" type="button">Step</button>
+      <button class="wc-btn" id="wc-reset" type="button">Reset</button>
+      <button class="wc-btn" id="wc-share" type="button">Share</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const SELECTOR = 'h1,h2,h3,p,a,li,button,img,[role="img"]';
+  const MAX_NODES = 40;
+  const TWEEN_MS = 700;
+  const DWELL_MS = 450;
+  const TRAIL_MS = 2600;
+  const LOG_SIZE = 8;
+  const FETCH_TIMEOUT_MS = 12000;
+  const MAX_HTML_CHARS = 3000000;
+  const PROXIES = [
+    (u) => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+    (u) => 'https://corsproxy.io/?url=' + encodeURIComponent(u),
+  ];
+  const STRIP_TAGS = 'script,noscript,template,iframe,frame,frameset,object,embed,applet,portal,param,' +
+    'link,meta,base,style,svg,math,video,audio,source,track,canvas,dialog';
+  const DROP_ATTRS = new Set(['class', 'style', 'name', 'srcset', 'sizes', 'srcdoc', 'action', 'method',
+    'formaction', 'formmethod', 'formtarget', 'formenctype', 'target', 'ping', 'background', 'nonce',
+    'integrity', 'crossorigin', 'autofocus', 'contenteditable', 'is', 'slot', 'popover', 'http-equiv']);
+  const URL_ATTRS = new Set(['href', 'src', 'xlink:href', 'poster', 'cite', 'longdesc', 'lowsrc', 'dynsrc', 'data']);
+
+  const byId = (id) => document.getElementById(id);
+  const sample = byId('wc-sample');
+  const remote = byId('wc-remote');
+  const canvas = byId('wc-canvas');
+  const ctx = canvas.getContext('2d');
+  const dock = byId('wc-dock');
+  const listEl = byId('wc-list');
+  const countEl = byId('wc-count');
+  const statusEl = byId('wc-status');
+  const playBtn = byId('wc-play');
+  const loadBtn = byId('wc-load');
+  const urlInput = byId('wc-url');
+
+  let root = sample;
+  let sourceLabel = 'built-in sample';
+  let queue = [];
+  let visited = [];
+  let cursor = 0;
+  let playing = true;
+  let move = null;
+  let current = null;
+  let dwellUntil = 0;
+  let trail = [];
+  let gait = 0;
+  let W = 0, H = 0, DPR = 1;
+  const spider = { x: 24, y: 24, angle: 0 };
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg;
+    statusEl.classList.toggle('wc-err', !!isError);
+  }
+
+  // ---------- crawl ----------
+  function isVisible(el) {
+    if (el.closest('[hidden],[aria-hidden="true"]')) return false;
+    if (typeof el.checkVisibility === 'function' &&
+        !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  function textOf(el) {
+    const raw = (el.tagName === 'IMG' ? '' : (el.innerText || '')).trim() ||
+      el.getAttribute('aria-label') || el.getAttribute('alt') || el.getAttribute('title') || '';
+    const t = raw.replace(/\s+/g, ' ').trim();
+    return t.length > 80 ? t.slice(0, 79) + '…' : t;
+  }
+
+  function collect() {
+    const out = [];
+    for (const el of root.querySelectorAll(SELECTOR)) {
+      if (out.length >= MAX_NODES) break;
+      if (!isVisible(el)) continue;
+      const text = textOf(el);
+      const href = el.getAttribute('href') || '';
+      if (!text && !href) continue;
+      out.push({ el, text, href });
+    }
+    return out;
+  }
+
+  function docRect(el) {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
+  }
+
+  function docCenter(el) {
+    const r = docRect(el);
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  }
+
+  function ensureInView(el) {
+    const r = el.getBoundingClientRect();
+    const bandBottom = window.innerHeight - dock.offsetHeight;
+    if (r.top < 12 || r.bottom > bandBottom - 12) {
+      const top = window.scrollY + r.top - Math.max(16, bandBottom * 0.35);
+      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+  }
+
+  function startMove(now) {
+    const item = queue[cursor];
+    ensureInView(item.el);
+    current = item.el;
+    move = { item, fromX: spider.x, fromY: spider.y, t0: now };
+  }
+
+  function arrive(now) {
+    const { item } = move;
+    const c = docCenter(item.el);
+    spider.x = c.x; spider.y = c.y;
+    move = null;
+    record(item);
+    cursor++;
+    dwellUntil = now + DWELL_MS;
+  }
+
+  function record(item) {
+    const r = docRect(item.el);
+    visited.push({
+      index: visited.length + 1,
+      tag: item.el.tagName.toLowerCase(),
+      id: item.el.id || 'gen-' + String(cursor + 1).padStart(2, '0'),
+      text: item.text,
+      href: item.href || null,
+      rect: { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) },
+    });
+    item.el.classList.add('wc-touched');
+    renderList();
+  }
+
+  function renderList() {
+    countEl.textContent = visited.length + ' / ' + queue.length;
+    const frag = document.createDocumentFragment();
+    for (const n of visited.slice(-LOG_SIZE).reverse()) {
+      const li = document.createElement('li');
+      const tag = document.createElement('span');
+      tag.className = 'wc-tag';
+      tag.textContent = '<' + n.tag + '>';
+      const txt = document.createElement('span');
+      txt.className = 'wc-txt';
+      txt.textContent = n.text || '(no text)';
+      li.append(tag, txt);
+      if (n.href) {
+        const h = document.createElement('span');
+        h.className = 'wc-href';
+        h.textContent = n.href;
+        li.append(h);
+      }
+      frag.append(li);
+    }
+    listEl.replaceChildren(frag);
+  }
+
+  function finish() {
+    playing = false;
+    updatePlay();
+    setStatus('Crawl complete: ' + visited.length + ' nodes from ' + sourceLabel + '. Share downloads crawls.json.');
+  }
+
+  function reset(autoplay) {
+    for (const el of document.querySelectorAll('.wc-touched')) el.classList.remove('wc-touched');
+    queue = collect();
+    visited = [];
+    cursor = 0;
+    move = null;
+    current = null;
+    trail = [];
+    const r = docRect(root);
+    spider.x = r.x + 16;
+    spider.y = r.y + 16;
+    spider.angle = Math.PI / 4;
+    dwellUntil = performance.now() + 400;
+    playing = !!autoplay && queue.length > 0;
+    updatePlay();
+    renderList();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setStatus(queue.length
+      ? 'Crawling ' + sourceLabel + ': ' + queue.length + ' nodes queued (max ' + MAX_NODES + ', depth 1).'
+      : 'No crawlable nodes in ' + sourceLabel + '.', !queue.length);
+  }
+
+  // ---------- controls ----------
+  function updatePlay() {
+    playBtn.textContent = playing ? 'Pause' : 'Play';
+    playBtn.setAttribute('aria-pressed', String(playing));
+  }
+
+  function togglePlay() {
+    if (!playing && cursor >= queue.length && !move) { reset(true); return; }
+    playing = !playing;
+    if (playing) {
+      dwellUntil = 0;
+      setStatus('Crawling ' + sourceLabel + '…');
+    } else {
+      setStatus('Paused at ' + visited.length + ' / ' + queue.length + '.');
+    }
+    updatePlay();
+  }
+
+  function step() {
+    playing = false;
+    updatePlay();
+    const now = performance.now();
+    if (move) arrive(now);
+    if (cursor < queue.length) {
+      startMove(now);
+      setStatus('Step ' + (cursor + 1) + ' / ' + queue.length + '.');
+    } else {
+      finish();
+    }
+  }
+
+  function share() {
+    const data = {
+      generator: 'DOM Spider',
+      source: sourceLabel,
+      crawledAt: new Date().toISOString(),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      count: visited.length,
+      nodes: visited,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'crawls.json';
+    a.style.display = 'none';
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    setStatus('Downloaded crawls.json (' + visited.length + ' nodes).');
+  }
+
+  // ---------- remote fetch + sanitize ----------
+  async function fetchText(url) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const r = await fetch(url, { signal: ac.signal, credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const text = await r.text();
+      if (!text.trim()) throw new Error('empty response');
+      return text.length > MAX_HTML_CHARS ? text.slice(0, MAX_HTML_CHARS) : text;
+    } catch (e) {
+      throw new Error(e && e.name === 'AbortError' ? 'timed out' : (e && e.message) || 'network error');
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  function safeUrl(value, base) {
+    try {
+      const u = new URL(value, base);
+      if (u.protocol === 'http:' || u.protocol === 'https:' || u.protocol === 'mailto:') return u.href;
+    } catch (_) { /* invalid URL */ }
+    return null;
+  }
+
+  function imgStandIn(doc, label) {
+    const d = doc.createElement('div');
+    d.className = 'wc-img';
+    d.setAttribute('role', 'img');
+    const text = (label || '').trim();
+    if (text) {
+      d.setAttribute('aria-label', text);
+      const s = doc.createElement('span');
+      s.textContent = text;
+      d.append(s);
+    }
+    return d;
+  }
+
+  function sanitize(html, base) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    for (const n of doc.querySelectorAll(STRIP_TAGS)) n.remove();
+    for (const el of Array.from(doc.body.querySelectorAll('*'))) {
+      for (const attr of Array.from(el.attributes)) {
+        const name = attr.name.toLowerCase();
+        if (name.startsWith('on') || DROP_ATTRS.has(name)) { el.removeAttribute(attr.name); continue; }
+        if (URL_ATTRS.has(name)) {
+          const safe = safeUrl(attr.value.trim(), base);
+          if (safe) el.setAttribute(attr.name, safe); else el.removeAttribute(attr.name);
+        }
+      }
+      if (el.id) el.id = 'r-' + el.id;
+      if (el.tagName === 'A' && el.hasAttribute('href')) {
+        el.setAttribute('target', '_blank');
+        el.setAttribute('rel', 'noopener noreferrer nofollow');
+      } else if (el.tagName === 'IMG') {
+        const src = el.getAttribute('src') || '';
+        if (!src.startsWith('https:')) {
+          el.replaceWith(imgStandIn(doc, el.getAttribute('alt')));
+        } else {
+          el.setAttribute('loading', 'lazy');
+          el.setAttribute('decoding', 'async');
+          el.setAttribute('referrerpolicy', 'no-referrer');
+        }
+      }
+    }
+    const frag = document.createDocumentFragment();
+    for (const n of Array.from(doc.body.childNodes)) frag.append(document.adoptNode(n));
+    return frag;
+  }
+
+  function showSample() {
+    remote.replaceChildren();
+    remote.hidden = true;
+    sample.hidden = false;
+    root = sample;
+    sourceLabel = 'built-in sample';
+    reset(true);
+  }
+
+  async function loadUrl(raw) {
+    let u;
+    try { u = new URL(raw); } catch (_) {
+      setStatus('Not a valid URL. Still crawling ' + sourceLabel + '.', true);
+      return;
+    }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+      setStatus('Only http(s) URLs are allowed. Still crawling ' + sourceLabel + '.', true);
+      return;
+    }
+    loadBtn.disabled = true;
+    setStatus('Fetching ' + u.host + ' via public CORS proxy (best effort)…');
+    let html = null;
+    const errors = [];
+    for (const proxy of PROXIES) {
+      try { html = await fetchText(proxy(u.href)); break; } catch (e) { errors.push(e.message); }
+    }
+    loadBtn.disabled = false;
+    if (!html) {
+      setStatus('Fetch failed for ' + u.host + ' (' + errors.join('; ') + '). Still crawling ' + sourceLabel + '.', true);
+      return;
+    }
+    const frag = sanitize(html, u.href);
+    remote.replaceChildren(frag);
+    remote.hidden = false;
+    sample.hidden = true;
+    const prevRoot = root;
+    root = remote;
+    if (!collect().length) {
+      remote.replaceChildren();
+      remote.hidden = true;
+      sample.hidden = false;
+      root = prevRoot;
+      setStatus('Fetched ' + u.host + ' but found no crawlable nodes. Still crawling ' + sourceLabel + '.', true);
+      return;
+    }
+    sourceLabel = u.href;
+    reset(true);
+  }
+
+  // ---------- drawing ----------
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 3);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    document.documentElement.style.setProperty('--dock-h', dock.offsetHeight + 'px');
+  }
+
+  function roundRectPath(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawSpider(x, y, angle, now) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    const moving = !!move;
+    const bases = [0.6, 1.15, 1.95, 2.5];
+    ctx.strokeStyle = '#d6e2ff';
+    ctx.lineWidth = 1.7;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 4; i++) {
+        const phase = gait + i * Math.PI / 2 + (side > 0 ? Math.PI : 0);
+        const swing = moving ? Math.sin(phase) * 0.28 : Math.sin(now / 420 + i) * 0.04;
+        const a = side * (bases[i] + swing);
+        const hx = 3 - i * 2.2, hy = side * 2;
+        const kx = hx + Math.cos(a) * 12, ky = hy + Math.sin(a) * 12;
+        const fa = a + side * (i < 2 ? -0.55 : 0.55);
+        const fx = kx + Math.cos(fa) * 13, fy = ky + Math.sin(fa) * 13;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(kx, ky);
+        ctx.lineTo(fx, fy);
+        ctx.stroke();
+      }
+    }
+    ctx.shadowColor = 'rgba(124,199,255,.8)';
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = '#2b3a55';
+    ctx.strokeStyle = '#7cc7ff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(-6, 0, 8.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(5, 0, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffdf7c';
+    ctx.beginPath(); ctx.arc(8, -1.8, 1.2, 0, Math.PI * 2); ctx.arc(8, 1.8, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw(now) {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const ox = window.scrollX, oy = window.scrollY;
+
+    ctx.lineCap = 'round';
+    for (let i = 1; i < trail.length; i++) {
+      const a = trail[i - 1], b = trail[i];
+      const life = 1 - (now - b.t) / TRAIL_MS;
+      if (life <= 0) continue;
+      ctx.strokeStyle = 'rgba(124,199,255,' + (life * 0.7).toFixed(3) + ')';
+      ctx.lineWidth = 0.5 + 2.5 * life;
+      ctx.beginPath();
+      ctx.moveTo(a.x - ox, a.y - oy);
+      ctx.lineTo(b.x - ox, b.y - oy);
+      ctx.stroke();
+    }
+
+    if (current && current.isConnected) {
+      const r = current.getBoundingClientRect();
+      const pulse = (Math.sin(now / 160) + 1) / 2;
+      const pad = 4 + pulse * 4;
+      roundRectPath(r.left - pad, r.top - pad, r.width + pad * 2, r.height + pad * 2, 8);
+      ctx.fillStyle = 'rgba(124,199,255,' + (0.05 + pulse * 0.06).toFixed(3) + ')';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(124,199,255,' + (0.45 + pulse * 0.5).toFixed(3) + ')';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    drawSpider(spider.x - ox, spider.y - oy, spider.angle, now);
+  }
+
+  function lerpAngle(a, b, t) {
+    const d = ((b - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    return a + d * t;
+  }
+
+  const easeInOut = (p) => (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
+
+  function frame(now) {
+    if (move) {
+      const p = Math.min(1, (now - move.t0) / TWEEN_MS);
+      const e = easeInOut(p);
+      const tgt = docCenter(move.item.el);
+      const nx = move.fromX + (tgt.x - move.fromX) * e;
+      const ny = move.fromY + (tgt.y - move.fromY) * e;
+      const dx = nx - spider.x, dy = ny - spider.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0.3) {
+        spider.angle = lerpAngle(spider.angle, Math.atan2(dy, dx), 0.25);
+        gait += Math.min(d, 40) * 0.12;
+        trail.push({ x: nx, y: ny, t: now });
+      }
+      spider.x = nx;
+      spider.y = ny;
+      if (p >= 1) arrive(now);
+    } else if (playing && now >= dwellUntil) {
+      if (cursor < queue.length) startMove(now); else finish();
+    } else if (current && current.isConnected) {
+      const c = docCenter(current);
+      spider.x = c.x;
+      spider.y = c.y;
+    }
+    while (trail.length && now - trail[0].t > TRAIL_MS) trail.shift();
+    draw(now);
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- wiring ----------
+  playBtn.addEventListener('click', togglePlay);
+  byId('wc-step').addEventListener('click', step);
+  byId('wc-reset').addEventListener('click', () => reset(true));
+  byId('wc-share').addEventListener('click', share);
+  byId('wc-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = urlInput.value.trim();
+    if (!v) { if (root !== sample) showSample(); return; }
+    loadUrl(v);
+  });
+  remote.addEventListener('submit', (e) => e.preventDefault(), true);
+  document.addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLButtonElement) return;
+    if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    else if (e.key === 'ArrowRight') step();
+  });
+  window.addEventListener('resize', resize);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(resize).observe(dock);
+
+  resize();
+  reset(true);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
